@@ -82,6 +82,27 @@ class IRCbot:
         return self._name
 
 
+    def send(self, message):
+        '''
+        Send a given message through the socket
+
+        Attributes:
+            message: A string
+        '''
+        self._socket.send((message+"\n").encode())
+
+    
+    def read(self, size=2048):
+        '''
+        Read *size* byte in the socket
+
+        Attributes:
+            size: An integer
+
+        Return a string
+        '''
+        return self._socket.recv(size).decode()
+
     def connect_server(self):
         '''
         Connect the IRCbot to its attached server
@@ -89,16 +110,27 @@ class IRCbot:
         self._socket = socket.socket()
         try:
             self._socket.connect((self.get_server(), self.get_port()))
-            self._socket.send( b"PASS foo\n" )
-            self._socket.send( ( "NICK %s\n" % self.get_botname() ).encode() )
-            self._socket.send( ( "USER IRC_Scrapper  %s foo bar\n" % self.get_server() ).encode() )
+            self.send("PASS foo")
+            self.send("NICK %s" % self.get_botname() )
+            self.send("USER IRC_Scrapper  %s foo bar" % self.get_server() )
             time.sleep(1)
-            self._socket.recv(2048).decode()
+            output=self.read(4096) #Nothing to do with that for the moment
             
+            print(output) #Debug
+            
+            if "PING" in output:
+                ping_value = output.split("PING :")[1].split('\n')[0]
+                self.send("PONG :%s" % ping_value)
+                time.sleep(1)
+                output = self.read(4096) #Still nothing to do
+
+            print(output) #Debug again
+
             print("The bot %s is connected to the server %s" % (self.get_botname(), self.get_server()))
-            
+
         except ConnectionRefusedError as e:
-            print("The connection of the bot %s to %s on port %d as failed" % (self._name, self._server, self._port))
+            print("The connection of the bot %s to %s on port %d as failed" % (self.get_botname(), self.get_server(), self.get_port()))
+            raise e
 
 
 
@@ -122,7 +154,7 @@ class IRCbot:
             return True
 
 
-    def join_chan(self,chan="#help"):
+    def join_chan(self,chan="#testbotscraper"):
         '''
         Join the given channel
 
@@ -133,4 +165,30 @@ class IRCbot:
             raise Exception("The IRCbot isn't connected to its server")
 
         else:
-            pass
+            try:
+                self.send("JOIN %s" % chan)
+                
+                output = self.read()
+
+                while "End of /NAMES list." not in output: #Usual message after joining a chan
+                    output = self.read()
+
+            except Exception as e:
+                print("The bot %s can't connect to the channel %s" % (self.get_botname(), chan))
+                raise e
+
+
+    def scrap(self,keyword_lst):
+        '''
+        Look for a given list of keyword
+
+        Attributes:
+            keyword_lst: A list of string
+        '''
+        while True:
+            
+            output = self.read()
+            
+            for kw in keyword_lst:
+                if kw in output:
+                    print("A message with the keyword %s has been read ! Look at this :\n%s" % (kw, output))
